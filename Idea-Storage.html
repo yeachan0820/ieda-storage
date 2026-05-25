@@ -24,6 +24,7 @@
         .status { margin-top: 12px; font-weight: 600; }
         .saved { color: green; }
         .error { color: red; }
+        input#github-token-input { width: 100%; padding: 12px; margin-top: 10px; border: 1px solid #d1d5db; border-radius: 12px; font: inherit; }
         .github-token { margin-top: 20px; padding: 16px; border-radius: 12px; background: #fff7e6; border: 1px solid #ffd8a8; }
     </style>
 </head>
@@ -38,7 +39,17 @@
 
     <div class="github-token">
         <strong>GitHub 자동 저장</strong><br>
-        HTML 파일 내 <code>GITHUB_TOKEN</code> 변수를 채워야만 GitHub에 저장할 수 있습니다. 토큰은 이 파일 내 JS 변수에 직접 붙여넣으세요.
+        HTML 파일 내 <code>GITHUB_TOKEN</code> 변수를 직접 편집하지 않아도 됩니다.
+        <label for="github-token-input" style="margin-top:12px; display:block; font-weight:600;">GitHub 토큰</label>
+        <input id="github-token-input" type="password" placeholder="여기에 Personal Access Token 붙여넣기">
+        <div id="token-actions" style="margin-top: 12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+            <button id="save-token-button">토큰 적용</button>
+            <button id="clear-token-button">토큰 삭제</button>
+            <span class="note" id="token-status">토큰은 페이지를 새로고침하면 초기화됩니다.</span>
+        </div>
+        <div style="margin-top: 14px;">
+            <button id="push-button">🔼 GitHub 푸시</button>
+        </div>
     </div>
 
     <div class="modal-backdrop" id="project-modal">
@@ -68,15 +79,13 @@
                 <button id="edit-button">✏️ 수정</button>
                 <button id="save-button" style="display:none;">💾 저장</button>
                 <button id="cancel-edit" style="display:none;">⛔ 취소</button>
-                <button id="push-button">🔼 GitHub 푸시</button>
             </div>
             <div class="status" id="status-text"></div>
-            <div class="note">*GitHub 토큰은 아래 스크립트의 <code>GITHUB_TOKEN</code> 변수에 직접 입력해야 합니다.</div>
+            <div class="note">*GitHub 토큰은 상단 입력란에 붙여넣고 토큰 적용 버튼을 누르세요. 새로고침 시 초기화됩니다.</div>
         </div>
     </div>
 
     <script>
-        const GITHUB_TOKEN = ''; // 여기에 GitHub Personal Access Token을 직접 붙여넣으세요.
         const GITHUB_OWNER = 'yeachan0820';
         const GITHUB_REPO = 'ieda-storage';
         const GITHUB_PATH = 'Idea-Storage.html';
@@ -114,12 +123,39 @@
         const editSummary = document.getElementById('edit-summary');
         const editDetail = document.getElementById('edit-detail');
         const editPrompt = document.getElementById('edit-prompt');
+        const githubTokenInput = document.getElementById('github-token-input');
+        const saveTokenButton = document.getElementById('save-token-button');
+        const clearTokenButton = document.getElementById('clear-token-button');
+        const tokenStatus = document.getElementById('token-status');
         const copyButton = document.getElementById('copy-prompt');
         const editButton = document.getElementById('edit-button');
         const saveButton = document.getElementById('save-button');
         const cancelButton = document.getElementById('cancel-edit');
         const pushButton = document.getElementById('push-button');
         const statusText = document.getElementById('status-text');
+
+        function getGithubToken() {
+            return githubTokenInput.value.trim();
+        }
+
+        function updateTokenStatus(message, isError = false) {
+            tokenStatus.textContent = message;
+            tokenStatus.className = isError ? 'note error' : 'note';
+        }
+
+        function saveToken() {
+            const token = getGithubToken();
+            if (!token) {
+                updateTokenStatus('토큰을 입력한 후 저장하세요.', true);
+                return;
+            }
+            updateTokenStatus('토큰이 페이지에 적용되었습니다. 새로고침하면 초기화됩니다.');
+        }
+
+        function clearToken() {
+            githubTokenInput.value = '';
+            updateTokenStatus('토큰이 제거되었습니다. 푸시하려면 다시 입력하세요.', true);
+        }
 
         function renderProjectList() {
             projectList.innerHTML = '';
@@ -204,10 +240,10 @@
             statusText.className = 'status saved';
         }
 
-        async function fetchFileSha() {
+        async function fetchFileSha(token) {
             const response = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_PATH}?ref=${GITHUB_BRANCH}`, {
                 headers: {
-                    Authorization: `Bearer ${GITHUB_TOKEN}`,
+                    Authorization: `Bearer ${token}`,
                     Accept: 'application/vnd.github+json'
                 }
             });
@@ -228,20 +264,21 @@
         }
 
         async function pushToGitHub() {
-            if (!GITHUB_TOKEN) {
-                statusText.textContent = 'GitHub 토큰을 먼저 입력해 주세요. HTML 파일 내 GITHUB_TOKEN 변수를 채워야 합니다.';
+            const currentToken = getGithubToken();
+            if (!currentToken) {
+                statusText.textContent = 'GitHub 토큰을 먼저 입력하고 토큰 적용을 눌러주세요.';
                 statusText.className = 'status error';
                 return;
             }
             try {
                 statusText.textContent = 'GitHub에 저장 중입니다...';
                 statusText.className = 'status';
-                const sha = await fetchFileSha();
+                const sha = await fetchFileSha(currentToken);
                 const content = encodeHtml(getCurrentPageHtml());
                 const response = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_PATH}`, {
                     method: 'PUT',
                     headers: {
-                        Authorization: `Bearer ${GITHUB_TOKEN}`,
+                        Authorization: `Bearer ${currentToken}`,
                         Accept: 'application/vnd.github+json',
                         'Content-Type': 'application/json'
                     },
@@ -271,6 +308,8 @@
         editButton.addEventListener('click', enableEditMode);
         saveButton.addEventListener('click', saveChanges);
         cancelButton.addEventListener('click', cancelEdit);
+        saveTokenButton.addEventListener('click', saveToken);
+        clearTokenButton.addEventListener('click', clearToken);
         pushButton.addEventListener('click', pushToGitHub);
     </script>
 </body>
