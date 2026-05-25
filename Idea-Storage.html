@@ -3,25 +3,275 @@
 <head>
     <meta charset="UTF-8">
     <title>💡 군대에서 키우는 아이디어 창고</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@example/water.css@2/out/water.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
+    <style>
+        body { max-width: 920px; margin: 0 auto; padding: 20px; }
+        .project-card { border: 1px solid #e0e0e0; border-radius: 12px; padding: 18px; margin-bottom: 16px; cursor: pointer; transition: box-shadow .2s, transform .2s; }
+        .project-card:hover { box-shadow: 0 10px 25px rgba(0,0,0,.08); transform: translateY(-2px); }
+        .project-card h3 { margin: 0 0 8px; }
+        .project-card p { margin: 0; color: #555; }
+        .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #f2f6ff; color: #1a3cbc; font-size: .9rem; }
+        .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 1000; }
+        .modal { background: white; border-radius: 18px; width: min(100%, 760px); max-height: 90vh; overflow: auto; padding: 24px; position: relative; }
+        .modal h2 { margin-top: 0; }
+        .modal-close { position: absolute; right: 18px; top: 18px; background: transparent; border: none; font-size: 1.4rem; cursor: pointer; }
+        .button-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+        .button-row button { min-width: 120px; }
+        .copy-button { display: inline-flex; align-items: center; gap: 8px; }
+        .prompt-box, .detail-box { background: #f7f8fc; padding: 16px; border-radius: 12px; white-space: pre-wrap; }
+        textarea { width: 100%; min-height: 120px; border: 1px solid #d1d5db; border-radius: 12px; padding: 12px; font: inherit; resize: vertical; }
+        .note { color: #555; font-size: .95rem; margin-top: 4px; }
+        .status { margin-top: 12px; font-weight: 600; }
+        .saved { color: green; }
+        .error { color: red; }
+        .github-token { margin-top: 20px; padding: 16px; border-radius: 12px; background: #fff7e6; border: 1px solid #ffd8a8; }
+    </style>
 </head>
 <body>
     <h1>🎖️ 개인 개발 대시보드</h1>
-    <p>전역일(2027.08.09)까지 끈을 놓지 않는다!</p>
-    
+    <p>전역일(2027.08.09)까지 끈을 놓지 않기 위한 아이디어 창고입니다. 여기서 바로 프로젝트를 확인하고, 상세 내용을 복사하거나 편집할 수 있습니다.</p>
+
     <hr>
-    
+
     <h2>📋 프로젝트 아이디어 리스트</h2>
-    <ul>
-        <li>
-            <strong>1. 8D Spatial Audio Customizer</strong> 
-            <button>프롬프트 복사</button>
-            <p>Web Audio API를 활용한 머리 주위 회전 입체 음향 플레이어</p>
-        </li>
-        <li>
-            <strong>2. Local AI 주식 매매 보조</strong>
-            <p>UI 자동화와 로컬 AI를 융합한 개인 금융 비서 툴</p>
-        </li>
-    </ul>
+    <div id="project-list"></div>
+
+    <div class="github-token">
+        <strong>GitHub 자동 저장</strong><br>
+        HTML 파일 내 <code>GITHUB_TOKEN</code> 변수를 채워야만 GitHub에 저장할 수 있습니다. 토큰은 이 파일 내 JS 변수에 직접 붙여넣으세요.
+    </div>
+
+    <div class="modal-backdrop" id="project-modal">
+        <div class="modal" role="dialog" aria-modal="true">
+            <button class="modal-close" id="close-modal">✕</button>
+            <h2 id="modal-title"></h2>
+            <p id="modal-summary" class="note"></p>
+            <div id="detail-view">
+                <h3>상세 내용</h3>
+                <div class="detail-box" id="modal-detail"></div>
+                <h3 style="margin-top:18px;">프롬프트</h3>
+                <div class="prompt-box" id="modal-prompt"></div>
+            </div>
+            <div id="edit-view" style="display:none;">
+                <h3>수정 모드</h3>
+                <label>프로젝트 제목</label>
+                <textarea id="edit-name"></textarea>
+                <label style="margin-top:12px;">한 줄 설명</label>
+                <textarea id="edit-summary"></textarea>
+                <label style="margin-top:12px;">상세 내용</label>
+                <textarea id="edit-detail"></textarea>
+                <label style="margin-top:12px;">프롬프트</label>
+                <textarea id="edit-prompt"></textarea>
+            </div>
+            <div class="button-row">
+                <button id="copy-prompt" class="copy-button">📋 내용 복사</button>
+                <button id="edit-button">✏️ 수정</button>
+                <button id="save-button" style="display:none;">💾 저장</button>
+                <button id="cancel-edit" style="display:none;">⛔ 취소</button>
+                <button id="push-button">🔼 GitHub 푸시</button>
+            </div>
+            <div class="status" id="status-text"></div>
+            <div class="note">*GitHub 토큰은 아래 스크립트의 <code>GITHUB_TOKEN</code> 변수에 직접 입력해야 합니다.</div>
+        </div>
+    </div>
+
+    <script>
+        const GITHUB_TOKEN = ''; // 여기에 GitHub Personal Access Token을 직접 붙여넣으세요.
+        const GITHUB_OWNER = 'yeachan0820';
+        const GITHUB_REPO = 'ieda-storage';
+        const GITHUB_PATH = 'Idea-Storage.html';
+        const GITHUB_BRANCH = 'main';
+
+        const projects = [
+            {
+                id: 1,
+                name: '8D Spatial Audio Customizer',
+                summary: 'Web Audio API를 활용한 머리 주위 회전 입체 음향 플레이어',
+                detail: 'Web Audio API를 활용하여 사용자의 헤드 포지션에 따라 8D 입체 음향을 조정하는 커스터마이징 플레이어를 만듭니다. 각 사운드 소스가 머리 주변을 회전하며 입체감 있는 청취 경험을 제공합니다.',
+                prompt: 'Web Audio API를 활용한 머리 주위 회전 입체 음향 플레이어'
+            },
+            {
+                id: 2,
+                name: 'Local AI 주식 매매 보조',
+                summary: 'UI 자동화와 로컬 AI를 융합한 개인 금융 비서 툴',
+                detail: '사용자 개인 PC에서 로컬 AI 모델과 UI 자동화를 결합하여 주식 매매 전략을 보조합니다. 외부 서버를 최소화하고, 개인화된 투자 아이디어를 빠르게 테스트할 수 있도록 설계합니다.',
+                prompt: 'UI 자동화와 로컬 AI를 융합한 개인 금융 비서 툴'
+            }
+        ];
+
+        let activeProject = null;
+
+        const projectList = document.getElementById('project-list');
+        const modal = document.getElementById('project-modal');
+        const closeModal = document.getElementById('close-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalSummary = document.getElementById('modal-summary');
+        const modalDetail = document.getElementById('modal-detail');
+        const modalPrompt = document.getElementById('modal-prompt');
+        const detailView = document.getElementById('detail-view');
+        const editView = document.getElementById('edit-view');
+        const editName = document.getElementById('edit-name');
+        const editSummary = document.getElementById('edit-summary');
+        const editDetail = document.getElementById('edit-detail');
+        const editPrompt = document.getElementById('edit-prompt');
+        const copyButton = document.getElementById('copy-prompt');
+        const editButton = document.getElementById('edit-button');
+        const saveButton = document.getElementById('save-button');
+        const cancelButton = document.getElementById('cancel-edit');
+        const pushButton = document.getElementById('push-button');
+        const statusText = document.getElementById('status-text');
+
+        function renderProjectList() {
+            projectList.innerHTML = '';
+            projects.forEach(project => {
+                const card = document.createElement('div');
+                card.className = 'project-card';
+                card.innerHTML = `
+                    <h3>${project.id}. ${project.name}</h3>
+                    <p>${project.summary}</p>
+                    <div class="badge">자세히 보기</div>
+                `;
+                card.addEventListener('click', () => showProject(project.id));
+                projectList.appendChild(card);
+            });
+        }
+
+        function showProject(id) {
+            activeProject = projects.find(p => p.id === id);
+            if (!activeProject) return;
+            updateModal();
+            modal.style.display = 'flex';
+            detailView.style.display = 'block';
+            editView.style.display = 'none';
+            saveButton.style.display = 'none';
+            cancelButton.style.display = 'none';
+            editButton.style.display = 'inline-flex';
+            statusText.textContent = '';
+        }
+
+        function updateModal() {
+            modalTitle.textContent = activeProject.name;
+            modalSummary.textContent = activeProject.summary;
+            modalDetail.textContent = activeProject.detail;
+            modalPrompt.textContent = activeProject.prompt;
+            editName.value = activeProject.name;
+            editSummary.value = activeProject.summary;
+            editDetail.value = activeProject.detail;
+            editPrompt.value = activeProject.prompt;
+        }
+
+        function copyPrompt() {
+            navigator.clipboard.writeText(activeProject.prompt)
+                .then(() => {
+                    statusText.textContent = '프롬프트가 클립보드에 복사되었습니다.';
+                    statusText.className = 'status saved';
+                })
+                .catch(() => {
+                    statusText.textContent = '클립보드 복사에 실패했습니다. 브라우저 권한을 확인하세요.';
+                    statusText.className = 'status error';
+                });
+        }
+
+        function enableEditMode() {
+            detailView.style.display = 'none';
+            editView.style.display = 'block';
+            saveButton.style.display = 'inline-flex';
+            cancelButton.style.display = 'inline-flex';
+            editButton.style.display = 'none';
+            statusText.textContent = '편집 중입니다. 수정 후 저장 버튼을 눌러주세요.';
+            statusText.className = 'status';
+        }
+
+        function cancelEdit() {
+            editView.style.display = 'none';
+            detailView.style.display = 'block';
+            saveButton.style.display = 'none';
+            cancelButton.style.display = 'none';
+            editButton.style.display = 'inline-flex';
+            updateModal();
+            statusText.textContent = '';
+        }
+
+        function saveChanges() {
+            activeProject.name = editName.value.trim() || activeProject.name;
+            activeProject.summary = editSummary.value.trim() || activeProject.summary;
+            activeProject.detail = editDetail.value.trim() || activeProject.detail;
+            activeProject.prompt = editPrompt.value.trim() || activeProject.prompt;
+            renderProjectList();
+            updateModal();
+            cancelEdit();
+            statusText.textContent = '내용이 업데이트되었습니다. GitHub로 푸시하려면 저장 버튼을 누르세요.';
+            statusText.className = 'status saved';
+        }
+
+        async function fetchFileSha() {
+            const response = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_PATH}?ref=${GITHUB_BRANCH}`, {
+                headers: {
+                    Authorization: `Bearer ${GITHUB_TOKEN}`,
+                    Accept: 'application/vnd.github+json'
+                }
+            });
+            if (!response.ok) {
+                const body = await response.text();
+                throw new Error(`GitHub 파일 정보를 가져오지 못했습니다: ${response.status} ${body}`);
+            }
+            const data = await response.json();
+            return data.sha;
+        }
+
+        function encodeHtml(raw) {
+            return btoa(unescape(encodeURIComponent(raw)));
+        }
+
+        function getCurrentPageHtml() {
+            return '<!DOCTYPE html>\\n' + document.documentElement.outerHTML;
+        }
+
+        async function pushToGitHub() {
+            if (!GITHUB_TOKEN) {
+                statusText.textContent = 'GitHub 토큰을 먼저 입력해 주세요. HTML 파일 내 GITHUB_TOKEN 변수를 채워야 합니다.';
+                statusText.className = 'status error';
+                return;
+            }
+            try {
+                statusText.textContent = 'GitHub에 저장 중입니다...';
+                statusText.className = 'status';
+                const sha = await fetchFileSha();
+                const content = encodeHtml(getCurrentPageHtml());
+                const response = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_PATH}`, {
+                    method: 'PUT',
+                    headers: {
+                        Authorization: `Bearer ${GITHUB_TOKEN}`,
+                        Accept: 'application/vnd.github+json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: 'Update Idea-Storage dashboard via browser',
+                        content,
+                        sha,
+                        branch: GITHUB_BRANCH
+                    })
+                });
+                if (!response.ok) {
+                    const body = await response.text();
+                    throw new Error(`푸시 실패: ${response.status} ${body}`);
+                }
+                statusText.textContent = 'GitHub에 성공적으로 저장되었습니다! 페이지를 새로고침해 변경 내용을 확인하세요.';
+                statusText.className = 'status saved';
+            } catch (error) {
+                statusText.textContent = error.message;
+                statusText.className = 'status error';
+            }
+        }
+
+        renderProjectList();
+        closeModal.addEventListener('click', () => modal.style.display = 'none');
+        window.addEventListener('click', event => { if (event.target === modal) modal.style.display = 'none'; });
+        copyButton.addEventListener('click', copyPrompt);
+        editButton.addEventListener('click', enableEditMode);
+        saveButton.addEventListener('click', saveChanges);
+        cancelButton.addEventListener('click', cancelEdit);
+        pushButton.addEventListener('click', pushToGitHub);
+    </script>
 </body>
 </html>
